@@ -68,5 +68,78 @@ python app.py
 * Explainable AI (XAI)
 
 ---
+# AutoML Studio 
+
+Automatic machine learning pipeline — upload a CSV, get the best model.
+
+## Folder Structure
+
+```
+automl_studio/
+├── app/
+│   └── main.py          # FastAPI app, ML logic, routes
+├── static/
+│   ├── css/
+│   │   └── style.css    # UI styles
+│   └── js/
+│       └── app.js       # Frontend JavaScript
+├── templates/
+│   └── index.html       # Jinja2 HTML template
+├── models/              # Saved .pkl model files (auto-created)
+├── uploads/             # Temp uploads (auto-created)
+├── run.py               # Entry point
+└── requirements.txt
+```
+
+## Setup & Run
+
+```bash
+# 1. Create virtual environment
+python -m venv venv
+source venv/bin/activate        # Windows: venv\Scripts\activate
+
+# 2. Install dependencies
+pip install -r requirements.txt
+
+# 3. Start the server
+python run.py
+# → http://localhost:8000
+```
+
+## Features
+
+| Feature | Detail |
+|---|---|
+| Auto problem detection | Classifies as regression or classification based on target column |
+| Auto target detection  | Finds target column by keyword matching |
+| Smart preprocessing    | Missing value imputation, cardinality capping, one-hot encoding |
+| 12 algorithms          | Full sklearn model suite for both problem types |
+| 5-fold cross-validation| With mean ± std reporting |
+| Rich charts            | Bar, CV, Confusion Matrix, Scatter, Radar, Feature Importance, Distribution |
+| Model export           | Download best model as `.pkl` with scaler + metadata |
+| Analysis tab           | Overfit detection, recommendations, top-5 comparison |
+
+## Using the Downloaded Model
+
+```python
+import pickle, pandas as pd
+
+with open("automl_best_model_XXXX.pkl", "rb") as f:
+    bundle = pickle.load(f)
+
+model        = bundle["model"]
+scaler       = bundle["scaler"]
+feature_names = bundle["feature_names"]
+problem_type  = bundle["problem_type"]
+target_col    = bundle["target_col"]
+
+# Predict on new data
+X_new = pd.read_csv("new_data.csv").drop(columns=[target_col])
+X_new = pd.get_dummies(X_new).reindex(columns=feature_names, fill_value=0)
+X_scaled = scaler.transform(X_new)
+predictions = model.predict(X_scaled)
+print(predictions)
+```
+
 
 ⭐ If you like this project, give it a star on GitHub!
