@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AutoML Studio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+<div class="noise"></div>
+
+<!-- ── Header ─────────────────────────────────────────────────────────────── -->
+<header class="header">
+  <div class="logo">
+    <div class="logo-orb">
+      <svg viewBox="0 0 36 36" fill="none"><circle cx="18" cy="18" r="17" stroke="#00f5c4" stroke-width="1.5" stroke-dasharray="4 2"/><circle cx="18" cy="18" r="8" fill="#00f5c4" fill-opacity=".15"/><circle cx="18" cy="18" r="4" fill="#00f5c4"/></svg>
+    </div>
+    <div>
+      <div class="logo-name">AutoML<span>Studio</span></div>
+      <div class="logo-sub">v2.0 · FastAPI</div>
+    </div>
+  </div>
+  <div class="header-actions">
+    <div class="status-pill" id="statusPill"><span class="status-dot"></span>Ready</div>
+    <button class="btn-ghost" onclick="resetAll()">↺ Reset</button>
+  </div>
+</header>
+
+<div class="app-shell">
+
+  <!-- ── Sidebar ───────────────────────────────────────────────────────────── -->
+  <aside class="sidebar">
+
+    <section class="sidebar-section">
+      <div class="section-label">01 · Dataset</div>
+      <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+        <div class="upload-inner">
+          <div class="upload-icon-wrap">
+            <svg viewBox="0 0 48 48" fill="none" width="40" height="40">
+              <rect x="4" y="4" width="40" height="40" rx="10" stroke="#3d6aff" stroke-width="1.5" stroke-dasharray="5 3"/>
+              <path d="M24 32V20M24 20L18 26M24 20L30 26" stroke="#00f5c4" stroke-width="2" stroke-linecap="round"/>
+              <path d="M14 36h20" stroke="#3d6aff" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="upload-label">Drop CSV here</div>
+          <div class="upload-hint">or click to browse · max 50MB</div>
+        </div>
+        <div class="file-info" id="fileInfo"></div>
+        <input type="file" id="fileInput" accept=".csv" style="display:none">
+      </div>
+    </section>
+
+    <!-- Dataset preview chip row -->
+    <div class="dataset-chips" id="datasetChips"></div>
+
+    <div class="divider"></div>
+
+    <section class="sidebar-section">
+      <div class="section-label">02 · Problem Type</div>
+      <div class="card-group">
+        <div class="option-card active" data-group="problem" data-val="auto">
+          <div class="oc-icon">🔮</div>
+          <div><div class="oc-title">Auto Detect</div><div class="oc-sub">AI decides for you</div></div>
+        </div>
+        <div class="option-card" data-group="problem" data-val="classification">
+          <div class="oc-icon">🏷️</div>
+          <div><div class="oc-title">Classification</div><div class="oc-sub">Predict categories</div></div>
+        </div>
+        <div class="option-card" data-group="problem" data-val="regression">
+          <div class="oc-icon">📈</div>
+          <div><div class="oc-title">Regression</div><div class="oc-sub">Predict values</div></div>
+        </div>
+      </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <section class="sidebar-section">
+      <div class="section-label">03 · Training Mode</div>
+      <div class="card-group">
+        <div class="option-card active" data-group="mode" data-val="auto">
+          <div class="oc-icon">⚡</div>
+          <div><div class="oc-title">Auto Train</div><div class="oc-sub">All algorithms</div></div>
+        </div>
+        <div class="option-card" data-group="mode" data-val="custom">
+          <div class="oc-icon">🎛️</div>
+          <div><div class="oc-title">Custom Select</div><div class="oc-sub">Pick your models</div></div>
+        </div>
+      </div>
+      <div class="model-chips" id="modelChips" style="display:none"></div>
+    </section>
+
+    <div class="divider"></div>
+
+    <section class="sidebar-section">
+      <div class="section-label">04 · Advanced</div>
+      <div class="field-row">
+        <label class="field-label">Target Column</label>
+        <select id="targetSel" class="field-select">
+          <option value="">Auto detect</option>
+        </select>
+      </div>
+      <div class="field-row">
+        <label class="field-label">Test Split — <span id="splitVal" class="accent-val">20%</span></label>
+        <input type="range" id="splitRange" class="range-slider" min="10" max="40" value="20"
+               oninput="document.getElementById('splitVal').textContent=this.value+'%'">
+      </div>
+    </section>
+
+    <button class="btn-train" id="trainBtn" onclick="startTraining()" disabled>
+      <span class="btn-train-icon">⚡</span>
+      <span>Train Models</span>
+    </button>
+
+  </aside>
+
+  <!-- ── Main Content ───────────────────────────────────────────────────────── -->
+  <main class="content">
+
+    <!-- Empty State -->
+    <div class="pane" id="emptyState">
+      <div class="hero">
+        <div class="hero-orbs">
+          <div class="orb orb-1"></div>
+          <div class="orb orb-2"></div>
+          <div class="orb orb-3"></div>
+        </div>
+        <h1 class="hero-title">AutoML<br><span>Studio</span></h1>
+        <p class="hero-desc">Upload a CSV dataset and let the engine automatically detect your problem type, preprocess features, and benchmark every algorithm — delivering the best model in seconds.</p>
+        <div class="pill-row">
+          <span class="pill">🔢 12 algorithms</span>
+          <span class="pill">🧹 Smart preprocessing</span>
+          <span class="pill">📊 5-fold CV</span>
+          <span class="pill">📉 Rich charts</span>
+          <span class="pill">⬇ Export model</span>
+        </div>
+        <div class="workflow">
+          <div class="wf-step"><div class="wf-n">1</div><div class="wf-t">Upload CSV</div></div>
+          <div class="wf-arrow">→</div>
+          <div class="wf-step"><div class="wf-n">2</div><div class="wf-t">Configure</div></div>
+          <div class="wf-arrow">→</div>
+          <div class="wf-step"><div class="wf-n">3</div><div class="wf-t">Train All</div></div>
+          <div class="wf-arrow">→</div>
+          <div class="wf-step"><div class="wf-n">4</div><div class="wf-t">Get Best</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Loading State -->
+    <div class="pane" id="loadingState" style="display:none">
+      <div class="loader-wrap">
+        <div class="loader-ring">
+          <svg viewBox="0 0 100 100" width="100" height="100">
+            <circle cx="50" cy="50" r="44" stroke="#1a2540" stroke-width="8" fill="none"/>
+            <circle cx="50" cy="50" r="44" stroke="#00f5c4" stroke-width="8" fill="none"
+                    stroke-dasharray="276" stroke-dashoffset="276" class="ring-progress" id="ringProgress"
+                    stroke-linecap="round" transform="rotate(-90 50 50)"/>
+          </svg>
+          <div class="ring-pct" id="ringPct">0%</div>
+        </div>
+        <div class="load-step" id="loadStep">Initialising pipeline…</div>
+        <div class="load-steps-list" id="loadStepsList"></div>
+      </div>
+    </div>
+
+    <!-- Results -->
+    <div class="pane" id="resultsPane" style="display:none">
+
+      <!-- Best Model Banner -->
+      <div class="best-banner" id="bestBanner"></div>
+
+      <!-- Metric Cards -->
+      <div class="metric-strip" id="metricStrip"></div>
+
+      <!-- Dataset stats -->
+      <div class="glass-card" id="datasetCard"></div>
+
+      <!-- Tabs -->
+      <div class="tabs-wrap">
+        <div class="tabs">
+          <button class="tab active" onclick="switchTab('rankings', this)">📋 Rankings</button>
+          <button class="tab"        onclick="switchTab('charts',   this)">📊 Charts</button>
+          <button class="tab"        onclick="switchTab('analysis', this)">🔍 Analysis</button>
+        </div>
+        <div id="tabRankings"><div class="tbl-wrap" id="tblWrap"></div></div>
+        <div id="tabCharts"   style="display:none"><div class="charts-grid" id="chartsGrid"></div></div>
+        <div id="tabAnalysis" style="display:none"><div class="analysis-wrap" id="analysisWrap"></div></div>
+      </div>
+
+    </div>
+
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="/static/js/app.js"></script>
+</body>
+</html>
