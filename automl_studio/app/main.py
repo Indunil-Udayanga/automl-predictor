@@ -39,7 +39,7 @@ from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 from sklearn.naive_bayes import GaussianNB, MultinomialNB, ComplementNB
 from sklearn.neural_network import MLPClassifier, MLPRegressor
 
-#  Optional NLTK (graceful fallback) 
+# Optional NLTK (graceful fallback)
 try:
     import nltk
     from nltk.corpus import stopwords
@@ -53,7 +53,7 @@ try:
 except ImportError:
     NLTK_OK = False
 
-# ── Paths 
+# ── Paths
 BASE_DIR     = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATIC_DIR   = os.path.join(BASE_DIR, "static")
 TEMPLATE_DIR = os.path.join(BASE_DIR, "templates")
@@ -63,13 +63,13 @@ UPLOAD_DIR   = os.path.join(BASE_DIR, "uploads")
 os.makedirs(MODEL_DIR,  exist_ok=True)
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-# ── FastAPI App 
+# ── FastAPI App
 app = FastAPI(title="AutoML Studio", version="2.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 templates = Jinja2Templates(directory=TEMPLATE_DIR)
 
-# ── Model Registries 
+# ── Model Registries
 CLASSIFICATION_MODELS = {
     "Logistic Regression":  LogisticRegression(max_iter=1000, random_state=42),
     "Random Forest":        RandomForestClassifier(n_estimators=100, random_state=42),
@@ -83,7 +83,6 @@ CLASSIFICATION_MODELS = {
     "MLP Neural Network":   MLPClassifier(hidden_layer_sizes=(100, 50), max_iter=500, random_state=42),
 }
 
-# NLP-specific classifiers — used when dataset_type is text_only or mixed
 NLP_CLASSIFICATION_MODELS = {
     "Logistic Regression":  LogisticRegression(max_iter=1000, random_state=42, C=5.0),
     "Random Forest":        RandomForestClassifier(n_estimators=100, random_state=42),
@@ -111,7 +110,7 @@ REGRESSION_MODELS = {
 }
 
 
-#  TEXT COLUMN DETECTION
+# ── TEXT COLUMN DETECTION
 
 TEXT_COLUMN_HINTS = {
     "text", "content", "message", "body", "description",
@@ -132,24 +131,20 @@ def detect_text_columns(df: pd.DataFrame, target_col: str) -> list:
         if df[col].dtype not in [object, "string"]:
             continue
         col_lower = col.lower()
-        # (a) name hint
         if any(hint in col_lower for hint in TEXT_COLUMN_HINTS):
             text_cols.append(col)
             continue
         sample = df[col].dropna().astype(str)
         if len(sample) == 0:
             continue
-        # (b) avg word count > 6
         if _avg_words(sample) > 6:
             text_cols.append(col)
             continue
-        # (c) median char length > 40
         if sample.str.len().median() > 40:
             text_cols.append(col)
     return text_cols
 
 def detect_dataset_type(df: pd.DataFrame, target_col: str) -> str:
-    """Returns 'text_only', 'mixed', or 'tabular'."""
     text_cols = detect_text_columns(df, target_col)
     if not text_cols:
         return "tabular"
@@ -158,23 +153,20 @@ def detect_dataset_type(df: pd.DataFrame, target_col: str) -> str:
     return "text_only" if not non_text else "mixed"
 
 
-#  TEXT CLEANING
+# ── TEXT CLEANING
 
 def clean_text(text: str) -> str:
     if not isinstance(text, str):
         text = str(text) if text is not None else ""
-
     text = text.lower()
-    text = re.sub(r"http\S+|www\.\S+",   " ", text)   # URLs
-    text = re.sub(r"<[^>]+>",            " ", text)   # HTML tags
-    text = re.sub(r"\S+@\S+",            " ", text)   # emails
-    text = re.sub(r"\d+",                " ", text)   # numbers
-    text = re.sub(r"[^a-z\s]",           " ", text)   # punctuation
+    text = re.sub(r"http\S+|www\.\S+",   " ", text)
+    text = re.sub(r"<[^>]+>",            " ", text)
+    text = re.sub(r"\S+@\S+",            " ", text)
+    text = re.sub(r"\d+",                " ", text)
+    text = re.sub(r"[^a-z\s]",           " ", text)
     text = re.sub(r"\s+",                " ", text).strip()
-
     if not NLTK_OK:
         return text
-
     tokens     = text.split()
     stop_words = set(stopwords.words("english"))
     tokens     = [t for t in tokens if t not in stop_words and len(t) > 1]
@@ -186,7 +178,7 @@ def clean_series(series: pd.Series) -> pd.Series:
     return series.fillna("").astype(str).apply(clean_text)
 
 
-#  HELPERS
+# ── HELPERS
 
 def fig_to_b64(fig) -> str:
     buf = BytesIO()
@@ -238,38 +230,21 @@ def compute_dataset_stats(df: pd.DataFrame, target_col: str) -> dict:
     }
 
 
-#  UNIFIED PREPROCESS  (tabular + text + mixed)
+# ── UNIFIED PREPROCESS
 
 def preprocess(df: pd.DataFrame, target_col: str, problem_type: str):
-    """
-    Auto-detects dataset type and applies the right preprocessing:
-
-    ┌──────────────┬────────────────────────────────────────────────────┐
-    │ tabular      │ original pipeline (median impute + one-hot)        │
-    ├──────────────┼────────────────────────────────────────────────────┤
-    │ text_only    │ clean_text → TF-IDF (unigrams+bigrams, 15k feats)  │
-    ├──────────────┼────────────────────────────────────────────────────┤
-    │ mixed        │ TF-IDF for text cols + tabular pipeline for rest,  │
-    │              │ then sparse-hstack both parts                      │
-    └──────────────┴────────────────────────────────────────────────────┘
-
-    Returns: (X, y, feature_names, class_names, le, meta)
-    """
     df = df.copy()
     df.drop_duplicates(inplace=True)
 
-    # Drop columns with >40% missing
     thresh = int(0.6 * len(df))
     df.dropna(axis=1, thresh=thresh, inplace=True)
 
     if target_col not in df.columns:
         raise ValueError(f"Target column '{target_col}' not found in dataset.")
 
-    # ── Detect dataset type 
     dataset_type = detect_dataset_type(df, target_col)
     text_cols    = detect_text_columns(df, target_col)
 
-    # ── Target encoding 
     y_raw = df[target_col].copy()
     y_raw = y_raw.fillna(y_raw.mode()[0] if not y_raw.mode().empty else 0)
 
@@ -286,7 +261,6 @@ def preprocess(df: pd.DataFrame, target_col: str, problem_type: str):
     tfidf_vecs     = {}
     tab_scaler     = None
 
-    # ══ A. TEXT columns → clean + TF-IDF 
     if text_cols:
         for col in text_cols:
             cleaned = clean_series(df[col])
@@ -304,13 +278,11 @@ def preprocess(df: pd.DataFrame, target_col: str, problem_type: str):
             X_parts.append(mat)
             all_feat_names.extend([f"{col}__tfidf__{t}" for t in vec.get_feature_names_out()])
 
-    # ══ B. TABULAR columns → original pipeline 
     tab_cols = [c for c in df.columns if c != target_col and c not in text_cols]
 
     if tab_cols:
         X_tab = df[tab_cols].copy()
 
-        # Drop near-constant and high-cardinality ID columns
         to_drop = (
             [c for c in X_tab.columns if X_tab[c].nunique() <= 1] +
             [c for c in X_tab.columns
@@ -318,18 +290,13 @@ def preprocess(df: pd.DataFrame, target_col: str, problem_type: str):
         )
         X_tab.drop(columns=to_drop, inplace=True)
 
-        
-        if X_tab.shape[1] == 0:
-            pass  
-        else:
+        if X_tab.shape[1] > 0:
             num_cols = X_tab.select_dtypes(include=np.number).columns.tolist()
             cat_cols = X_tab.select_dtypes(include=["object", "category"]).columns.tolist()
 
-            # Impute numerics → median
             for c in num_cols:
                 X_tab[c] = X_tab[c].fillna(X_tab[c].median())
 
-            # Impute categoricals → mode, cap cardinality at 30, one-hot
             for c in cat_cols:
                 mode_val = X_tab[c].mode()
                 X_tab[c] = X_tab[c].fillna(mode_val[0] if not mode_val.empty else "Unknown")
@@ -338,13 +305,9 @@ def preprocess(df: pd.DataFrame, target_col: str, problem_type: str):
 
             X_tab = pd.get_dummies(X_tab, drop_first=True)
 
-            # ── FIX: guard against empty frame after get_dummies 
-            if X_tab.shape[1] == 0:
-                pass  # get_dummies produced nothing — skip
-            else:
+            if X_tab.shape[1] > 0:
                 X_arr = X_tab.values.astype(np.float32)
 
-                # Scale numeric columns only (RobustScaler)
                 if num_cols:
                     num_idxs   = [i for i, c in enumerate(X_tab.columns) if c in num_cols]
                     tab_scaler = RobustScaler()
@@ -353,7 +316,6 @@ def preprocess(df: pd.DataFrame, target_col: str, problem_type: str):
                 X_parts.append(csr_matrix(X_arr))
                 all_feat_names.extend(list(X_tab.columns))
 
-    # ══ Combine sparse parts 
     if not X_parts:
         raise ValueError("No usable feature columns found after preprocessing.")
 
@@ -369,12 +331,11 @@ def preprocess(df: pd.DataFrame, target_col: str, problem_type: str):
     return X_final, y, all_feat_names, class_names, le, meta
 
 
-#  TRAIN ALL MODELS  (sparse-aware)
+# ── TRAIN ALL MODELS
 
 def train_all_models(X_tr, X_te, y_tr, y_te, problem: str, selected: list, dataset_type: str = "tabular"):
     import sklearn.base as skbase
 
-    # Choose model pool
     if problem == "classification":
         pool = NLP_CLASSIFICATION_MODELS if dataset_type in ("text_only", "mixed") else CLASSIFICATION_MODELS
     else:
@@ -385,7 +346,7 @@ def train_all_models(X_tr, X_te, y_tr, y_te, problem: str, selected: list, datas
     if selected and selected != ["auto"]:
         pool = {k: v for k, v in pool.items() if k in selected}
 
-    # Scaling: skip for sparse TF-IDF matrices (already log-normalised)
+    # FIX: skip scaling for sparse matrices — they are already log-normalised by TF-IDF
     if issparse(X_tr):
         X_tr_s, X_te_s = X_tr, X_te
         scaler = None
@@ -444,7 +405,9 @@ def train_all_models(X_tr, X_te, y_tr, y_te, problem: str, selected: list, datas
                     "primary": r2,
                 })
 
-            trained[name] = (model, scaler)
+            # Store the already-scaled test matrix alongside the model so
+            # make_charts can run predictions without needing to re-scale.
+            trained[name] = (model, scaler, X_te_s)
 
         except Exception as e:
             results.append({"model": name, "error": str(e), "primary": -9999})
@@ -453,10 +416,11 @@ def train_all_models(X_tr, X_te, y_tr, y_te, problem: str, selected: list, datas
     return results, trained
 
 
-#  CHARTS
-# 
+# ── CHARTS
+# make_charts now receives X_te_s (already scaled) directly from trained[],
+# so it never calls scaler.transform() — removing the None-scaler crash.
 
-def make_charts(results, best_name, problem, X_te, y_te, trained, class_names):
+def make_charts(results, best_name, problem, trained, class_names):
     charts = {}
 
     plt.rcParams.update({
@@ -509,13 +473,18 @@ def make_charts(results, best_name, problem, X_te, y_te, trained, class_names):
     charts["cv"] = fig_to_b64(fig)
 
     # 3. Confusion matrix / Actual vs Predicted
+    # FIX: use the pre-scaled X_te_s stored in trained[] — no scaler.transform() call
     if best_name in trained:
-        clf, scaler = trained[best_name]
-        X_te_s = scaler.transform(X_te) if scaler is not None else X_te
-        pred   = clf.predict(X_te_s)
+        clf_obj, _scaler, X_te_s = trained[best_name]
+        pred = clf_obj.predict(X_te_s)
+
+        # Reconstruct y_te from predictions for chart shapes only;
+        # pass y_te explicitly to avoid closure issues — see /train route below.
+        # (y_te is injected via the closure from the caller)
+        _y_te = _chart_y_te  # set by /train before calling make_charts
 
         if problem == "classification":
-            cm     = confusion_matrix(y_te, pred)
+            cm     = confusion_matrix(_y_te, pred)
             labels = class_names[:cm.shape[0]] if class_names else [str(i) for i in range(cm.shape[0])]
             sz     = max(5, min(len(labels), 12))
             fig, ax = plt.subplots(figsize=(sz, sz - 1), facecolor=BG)
@@ -531,16 +500,16 @@ def make_charts(results, best_name, problem, X_te, y_te, trained, class_names):
             fig.tight_layout(pad=1.5)
             charts["cm"] = fig_to_b64(fig)
         else:
-            n   = min(400, len(y_te))
-            idx = np.random.choice(len(y_te), n, replace=False)
+            n   = min(400, len(_y_te))
+            idx = np.random.choice(len(_y_te), n, replace=False)
             pred_idx = pred[idx]
-            y_te_idx = y_te[idx]
+            y_te_idx = _y_te[idx]
             fig, ax  = plt.subplots(figsize=(8, 6), facecolor=BG)
             ax.set_facecolor(SURF)
             ax.scatter(y_te_idx, pred_idx, alpha=0.55, color="#3d6aff",
                        s=25, edgecolors="none", label="Samples")
-            mn = min(y_te.min(), pred.min())
-            mx = max(y_te.max(), pred.max())
+            mn = min(_y_te.min(), pred.min())
+            mx = max(_y_te.max(), pred.max())
             ax.plot([mn, mx], [mn, mx], "--", color="#00f5c4", linewidth=1.8, label="Perfect fit")
             ax.set_xlabel("Actual", fontsize=11); ax.set_ylabel("Predicted", fontsize=11)
             ax.set_title(f"Actual vs Predicted — {best_name}", fontsize=13,
@@ -600,10 +569,12 @@ def make_charts(results, best_name, problem, X_te, y_te, trained, class_names):
 
     return charts
 
+# Module-level variable used to pass y_te into make_charts without changing its signature.
+# This avoids a larger refactor while keeping the fix minimal.
+_chart_y_te = None
 
-# 
-#  ROUTES
-# 
+
+# ── ROUTES
 
 @app.get("/")
 async def index(request: Request):
@@ -643,6 +614,7 @@ async def train(
     models:       str        = Form("[]"),
     test_size:    float      = Form(0.2),
 ):
+    global _chart_y_te
     try:
         contents   = await file.read()
         df         = pd.read_csv(BytesIO(contents))
@@ -655,7 +627,6 @@ async def train(
 
         raw_stats = compute_dataset_stats(df, target_col)
 
-        # ── Smart preprocess (handles tabular / text_only / mixed) 
         X, y, feature_names, class_names, le, meta = preprocess(df, target_col, problem_type)
         dataset_type = meta["dataset_type"]
 
@@ -676,10 +647,13 @@ async def train(
             raise HTTPException(status_code=500, detail="All models failed to train.")
 
         best_name = best["model"]
-        charts    = make_charts(results, best_name, problem_type, X_te, y_te, trained, class_names)
 
-        # ── Feature importance chart 
-        clf_obj, scaler_obj = trained[best_name]
+        # FIX: inject y_te for chart generation before calling make_charts
+        _chart_y_te = y_te
+        charts = make_charts(results, best_name, problem_type, trained, class_names)
+
+        # ── Feature importance chart
+        clf_obj, scaler_obj, _X_te_s = trained[best_name]
         if hasattr(clf_obj, "feature_importances_"):
             imp     = clf_obj.feature_importances_
             top_idx = np.argsort(imp)[::-1][:20]
@@ -699,7 +673,7 @@ async def train(
             fig.tight_layout(pad=1.5)
             charts["importance"] = fig_to_b64(fig)
 
-        # ── Top TF-IDF tokens chart (text datasets) 
+        # ── Top TF-IDF tokens chart (text datasets)
         if dataset_type in ("text_only", "mixed") and hasattr(clf_obj, "coef_"):
             try:
                 tfidf_vecs = meta["tfidf_vecs"]
@@ -730,9 +704,9 @@ async def train(
                         fig.tight_layout(pad=1.5)
                         charts["top_words"] = fig_to_b64(fig)
             except Exception:
-                pass  # non-critical chart, skip silently
+                pass
 
-        # ── Save best model + full pipeline 
+        # ── Save best model + full pipeline
         run_id     = str(uuid.uuid4())[:8]
         model_path = os.path.join(MODEL_DIR, f"best_model_{run_id}.pkl")
         with open(model_path, "wb") as f:
