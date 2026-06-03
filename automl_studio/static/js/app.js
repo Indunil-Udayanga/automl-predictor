@@ -1,6 +1,6 @@
 'use strict';
 
-/* ── Model lists ─────────────────────────────────────────────────────────── */
+/* ── Model lists  */
 const CLS_MODELS = [
   'Logistic Regression','Random Forest','Gradient Boosting',
   'Extra Trees','AdaBoost','Decision Tree',
@@ -26,12 +26,12 @@ const LOAD_STEPS = [
   'Saving best model…',
 ];
 
-/* ── State ───────────────────────────────────────────────────────────────── */
+/* ── State  */
 let _file   = null;
 let _runId  = null;
 let _lastData = null;
 
-/* ── DOM helpers ─────────────────────────────────────────────────────────── */
+/* ── DOM helpers  */
 const $ = id => document.getElementById(id);
 const qs  = sel => document.querySelector(sel);
 const qsa = sel => document.querySelectorAll(sel);
@@ -83,7 +83,7 @@ function getSelectedModels() {
   return Array.from(qsa('#modelChips .mc.on')).map(c => c.dataset.model);
 }
 
-/* ── Upload ───────────────────────────────────────────────────────────────── */
+/* ── Upload  */
 function bindUpload() {
   const zone = $('uploadZone');
   const inp  = $('fileInput');
@@ -150,7 +150,8 @@ function showDatasetChips(data) {
     ['Cat',     data.categorical_features],
     ['Missing', data.missing_pct + '%'],
     ['Dups',    data.duplicates],
-  ].map(([k, v]) => `<div class="dc"><span>${k}</span><strong>${v}</strong></div>`).join('');
+  ].map(([k, v]) => `<div class="dc"><strong>${v}</strong><span>${k}</span></div>`).join('');
+  wrap.classList.add('visible');
 }
 
 /* ── Training ──────────────────────────────────────────────────────────────── */
@@ -250,7 +251,7 @@ function updateRing(pct) {
   $('ringPct').textContent = pct + '%';
 }
 
-/* ── Render results ───────────────────────────────────────────────────────── */
+/* ── Render results  */
 function renderResults(data) {
   const isClf  = data.problem_type === 'classification';
   const valid  = data.results.filter(r => !r.error);
@@ -321,7 +322,7 @@ function renderResults(data) {
   renderAnalysis(data, isClf);
 }
 
-/* ── Table ─────────────────────────────────────────────────────────────────── */
+/* ── Table  */
 function renderTable(results, isClf) {
   const valid  = results.filter(r => !r.error);
   const maxP   = valid.length ? Math.max(...valid.map(r => r.primary)) : 1;
@@ -386,7 +387,7 @@ function renderTable(results, isClf) {
   `;
 }
 
-/* ── Charts ────────────────────────────────────────────────────────────────── */
+/* ── Charts  */
 const CHART_META = [
   { key: 'bar',        title: 'Model Comparison',       full: true  },
   { key: 'cv',         title: '5-Fold Cross-Validation', full: true  },
@@ -408,7 +409,7 @@ function renderCharts(charts) {
     `).join('');
 }
 
-/* ── Analysis Tab ──────────────────────────────────────────────────────────── */
+/* ── Analysis Tab  */
 function renderAnalysis(data, isClf) {
   const valid = data.results.filter(r => !r.error);
   const best  = valid[0];
@@ -524,11 +525,14 @@ function buildRecommendations(best, second, problem, overfitScore) {
   return tips.map(t => `<div style="padding:10px 14px;background:var(--surface3);border-radius:8px;border:1px solid var(--border);font-size:0.83rem;line-height:1.6;margin-bottom:8px">${t}</div>`).join('');
 }
 
-/* ── Download ──────────────────────────────────────────────────────────────── */
+/* ── Download ─────────────────────────────────────────────────────────────── */
 async function downloadModel() {
   if (!_runId) { toast('No model — train first', 'err'); return; }
 
-  const btn    = $('dlBtn');
+  // FIX 1: null guard — button lives inside innerHTML so query fresh each time
+  const btn = $('dlBtn');
+  if (!btn) { toast('UI error — please re-train', 'err'); return; }
+
   const dlText = btn.querySelector('.dl-text');
   btn.disabled = true;
   btn.classList.add('loading');
@@ -541,7 +545,9 @@ async function downloadModel() {
 
     if (!exists) {
       toast('Model file not found on server — please re-train.', 'err');
-      dlText.textContent = '⬇ Download .pkl';
+      // FIX 2: re-query btn before touching it (DOM may have shifted)
+      const b = $('dlBtn');
+      if (b) b.querySelector('.dl-text').textContent = '⬇ Download .pkl';
       return;
     }
 
@@ -563,18 +569,28 @@ async function downloadModel() {
     URL.revokeObjectURL(url);
 
     toast('Model downloaded successfully!', 'ok');
-    dlText.textContent = '⬇ Download .pkl';
+    // FIX 3: re-query after async gap — original btn reference may be stale
+    const b = $('dlBtn');
+    if (b) b.querySelector('.dl-text').textContent = '⬇ Download .pkl';
 
   } catch (err) {
     toast('Download failed: ' + err.message, 'err');
-    dlText.textContent = '⬇ Download .pkl';
   } finally {
-    btn.disabled = false;
-    btn.classList.remove('loading');
+    // FIX 4: always re-query in finally — this is the main fix for the broken button
+    const b = $('dlBtn');
+    if (b) {
+      b.disabled = false;
+      b.classList.remove('loading');
+      // only reset text if it wasn't already reset above
+      const t = b.querySelector('.dl-text');
+      if (t && t.textContent !== '⬇ Download .pkl') {
+        t.textContent = '⬇ Download .pkl';
+      }
+    }
   }
 }
 
-/* ── Tab switching ─────────────────────────────────────────────────────────── */
+/* ── Tab switching  */
 function switchTab(name, el) {
   qsa('.tab').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
@@ -583,7 +599,7 @@ function switchTab(name, el) {
   });
 }
 
-/* ── Pane switching ────────────────────────────────────────────────────────── */
+/* ── Pane switching  */
 function showPane(name) {
   const map = { empty: 'emptyState', loading: 'loadingState', results: 'resultsPane' };
   Object.entries(map).forEach(([k, id]) => {
@@ -592,14 +608,14 @@ function showPane(name) {
   if (name === 'results') $(map.results).style.display = 'flex';
 }
 
-/* ── Status pill ───────────────────────────────────────────────────────────── */
+/* ── Status pill  */
 function setStatus(msg, ok) {
   const pill = $('statusPill');
   pill.querySelector('.status-dot').style.background = ok ? 'var(--accent)' : 'var(--accent5)';
   pill.lastChild.textContent = msg;
 }
 
-/* ── Reset ─────────────────────────────────────────────────────────────────── */
+/* ── Reset  */
 function resetAll() {
   _file = null; _runId = null; _lastData = null;
   $('fileInput').value      = '';
@@ -607,6 +623,7 @@ function resetAll() {
   $('fileInfo').textContent = '';
   $('uploadZone').classList.remove('has-file', 'drag');
   $('datasetChips').innerHTML = '';
+  $('datasetChips').style.display = 'none';
   $('targetSel').innerHTML    = '<option value="">Auto detect</option>';
   $('trainBtn').disabled      = true;
   showPane('empty');
@@ -614,7 +631,7 @@ function resetAll() {
   toast('Reset complete', 'inf');
 }
 
-/* ── Toast ─────────────────────────────────────────────────────────────────── */
+/* ── Toast  */
 let _toastTimer = null;
 function toast(msg, type = 'ok') {
   const el   = $('toast');
