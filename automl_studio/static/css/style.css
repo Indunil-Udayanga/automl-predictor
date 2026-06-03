@@ -44,7 +44,7 @@ body {
   opacity: 0.4;
 }
 
-/* ── Header ──────────────────────────────────────────────────────────────── */
+/* ── Header  */
 .header {
   position: sticky; top: 0; z-index: 100;
   display: flex; align-items: center; justify-content: space-between;
@@ -139,16 +139,30 @@ body {
 .file-info.visible { display: block; }
 
 /* Dataset chips */
+/* Dataset chips */
 .dataset-chips {
-  display: flex; flex-wrap: wrap; gap: 5px;
-  margin-top: 8px; min-height: 0;
+  display: none;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin: 10px 0 4px;
 }
-.dc { 
-  font-size: 0.7rem; padding: 3px 9px; border-radius: 100px;
+.dataset-chips.visible {
+  display: grid;
+}
+.dc {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 7px 4px; border-radius: 8px;
   background: var(--surface2); border: 1px solid var(--border2);
-  color: var(--text2); font-family: var(--font-mono);
+  text-align: center; min-width: 0; overflow: hidden;
 }
-.dc strong { color: var(--text); }
+.dc span {
+  font-size: 0.58rem; color: var(--text3); text-transform: uppercase;
+  letter-spacing: 0.05em; white-space: nowrap; font-family: var(--font-mono);
+}
+.dc strong {
+  color: var(--text); font-size: 0.78rem; font-family: var(--font-mono);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+}
 
 /* Option Cards */
 .card-group { display: flex; flex-direction: column; gap: 6px; }
@@ -320,6 +334,7 @@ body {
 .best-banner::before {
   content: ''; position: absolute; inset: 0;
   background: radial-gradient(ellipse at 30% 50%, rgba(0,245,196,.06), transparent 60%);
+  pointer-events: none; z-index: 0;
 }
 .best-tag {
   font-size: 0.68rem; font-family: var(--font-mono); letter-spacing: .1em;
@@ -341,6 +356,7 @@ body {
   color: var(--accent); font-weight: 600; font-size: 0.85rem; font-family: var(--font-main);
   transition: all .2s; display: flex; align-items: center; gap: 6px;
   margin-left: auto; white-space: nowrap;
+  position: relative; z-index: 1;
 }
 .btn-dl:hover  { background: rgba(0,245,196,.2); box-shadow: 0 0 16px rgba(0,245,196,.2); }
 .btn-dl:disabled { opacity: 0.5; cursor: not-allowed; }
